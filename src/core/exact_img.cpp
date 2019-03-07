@@ -110,6 +110,11 @@ namespace also
 
     spec.fanin = 2; //each node has at most 2 fanins, while it equals 3 for MAJ synthesis
     spec.set_primitive( AIG );
+    spec.add_alonce_clauses = true;
+    spec.add_lex_func_clauses = true;
+    spec.add_nontriv_clauses = true;
+    spec.add_noreapply_clauses = true;
+    spec.add_symvar_clauses = true;
     spec[0] = tt;
 
     if( verbose )

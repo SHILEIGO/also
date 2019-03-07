@@ -32,6 +32,8 @@
 #include "commands/exact_m5ig.hpp"
 #include "commands/exprsim.hpp"
 
+#include "encoders/img_encoder.hpp"
+
 ALICE_MAIN( also )
 
 namespace also
