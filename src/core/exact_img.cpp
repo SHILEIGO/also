@@ -99,7 +99,7 @@ namespace also
     return img;
   }
 
-  void img_syn( const kitty::dynamic_truth_table& tt, const bool& verbose )
+  void implication_syn_by_aig_encoder( const kitty::dynamic_truth_table& tt, const bool& verbose )
   {
     chain c;
     spec spec;
@@ -171,5 +171,4 @@ namespace also
           to_seconds( time ), nr_solutions );
     }
   }
-
 }

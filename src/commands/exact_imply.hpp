@@ -37,9 +37,13 @@
 
 #include <alice/alice.hpp>
 #include <mockturtle/mockturtle.hpp>
+#include <percy/percy.hpp>
 
 #include "../store.hpp"
 #include "../core/exact_img.hpp"
+#include "../encoders/img_encoder.hpp"
+
+using namespace percy;
 
 namespace alice
 {
@@ -47,14 +51,44 @@ namespace alice
   class exact_imply_command: public command
   {
     public:
-      explicit exact_imply_command( const environment::ptr& env ) : command( env, "using exact synthesis to find optimal imgs" )
+      explicit exact_imply_command( const environment::ptr& env ) : 
+                           command( env, "using exact synthesis to find optimal imgs" )
       {
         add_flag( "--verbose, -v",  "print the information" );
+        add_flag( "--img_encoder, -i",  "using the img encoder for synthesize" );
       }
 
       rules validity_rules() const
       {
         return { has_store_element<optimum_network>( env ) };
+      }
+
+    private:
+      void nbu_img_encoder_test( const kitty::dynamic_truth_table& tt )
+      {
+        bsat_wrapper solver;
+        spec spec;
+
+        auto copy = tt;
+        if( copy.num_vars()  < 2 )
+        {
+          spec[0] = kitty::extend_to( copy, 2 );
+        }
+        else
+        {
+          spec[0] = tt;
+        }
+
+        also::img_encoder encoder( solver );
+
+        if ( also::implication_syn_by_img_encoder( spec, solver, encoder ) == success )
+        {
+          std::cout << " success " << std::endl;
+        }
+        else
+        {
+          std::cout << " fail " << std::endl;
+        }
       }
 
 
@@ -69,7 +103,15 @@ namespace alice
         }
 
         auto& opt = store<optimum_network>().current();
-        also::img_syn( opt.function, verb );
+
+        if( is_set( "img_encoder" ) )
+        {
+          nbu_img_encoder_test( opt.function );
+        }
+        else
+        {
+          also::implication_syn_by_aig_encoder( opt.function, verb );
+        }
       }
 
   };

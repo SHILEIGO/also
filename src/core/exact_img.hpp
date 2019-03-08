@@ -40,7 +40,7 @@
 namespace also
 {
 
-  void img_syn( const kitty::dynamic_truth_table& tt, const bool& verbose );
+  void implication_syn_by_aig_encoder( const kitty::dynamic_truth_table& tt, const bool& verbose );
 
 }
 
