@@ -24,7 +24,7 @@ namespace alice
     public:
       explicit lut_mapping_command( const environment::ptr& env ) : command( env, "LUT mapping" )
       {
-        add_option( "cut_size, -k", cut_size, "set the cut size from 2 to 8, default = 4" );
+        add_option( "--cut_size, -k", cut_size, "set the cut size from 2 to 8, default = 4" );
         add_flag( "--verbose, -v", "print the information" );
         add_flag( "--satlut, -s",  "satlut mapping" );
       }
@@ -46,13 +46,13 @@ namespace alice
         if( is_set( "satlut" ) )
         {
           satlut_mapping_params ps;
-          ps.cut_enumeration_ps.cut_size = 4;
+          ps.cut_enumeration_ps.cut_size = cut_size;
           satlut_mapping<mapping_view<aig_network, true>, true>(mapped_aig, ps );
         }
         else
         {
           lut_mapping_params ps;
-          ps.cut_enumeration_ps.cut_size = 4;
+          ps.cut_enumeration_ps.cut_size = cut_size;
           lut_mapping<mapping_view<aig_network, true>, true>( mapped_aig, ps );
         }
 

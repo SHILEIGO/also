@@ -23,9 +23,12 @@ namespace alice
     public:
       explicit cutrw_command( const environment::ptr& env ) : command( env, "Performs cut rewriting" )
       {
+        add_flag( "--xmg, -x",            "xmg based resynthesize" );
+        add_flag( "--m5ig, -r",           "m5ig based resynthesize" );
       }
-
-      void print_stats( const xmg_network& xmg )
+      
+      template<class Ntk>
+      void print_stats( Ntk& xmg )
      {
        depth_view depth_xmg( xmg );
        std::cout << fmt::format( "xmg   i/o = {}/{}   gates = {}   level = {}\n", 
@@ -35,20 +38,43 @@ namespace alice
       void execute()
       {
         /* parameters */
-        xmg_network xmg = store<xmg_network>().current();
+        if( is_set( "m5ig" ) )
+        {
+          /*TODO*/
+#if 0
+          m5ig_network m5ig = store<m5ig_network>().current();
 
-        print_stats( xmg );
+          print_stats( m5ig );
 
-        xmg_npn_resynthesis resyn;
-        cut_rewriting_params ps;
-        ps.cut_enumeration_ps.cut_size = 4u;
-        cut_rewriting( xmg, resyn, ps );
-        xmg = cleanup_dangling( xmg );
-        
-        print_stats( xmg );
-        
-        store<xmg_network>().extend(); 
-        store<xmg_network>().current() = xmg;
+          m5ig_npn_resynthesis resyn;
+          cut_rewriting_params ps;
+          ps.cut_enumeration_ps.cut_size = 4u;
+          cut_rewriting( m5ig, resyn, ps );
+          m5ig = cleanup_dangling( m5ig );
+
+          print_stats( m5ig );
+
+          store<m5ig_network>().extend(); 
+          store<m5ig_network>().current() = m5ig;
+#endif
+        }
+        else
+        {
+          xmg_network xmg = store<xmg_network>().current();
+
+          print_stats( xmg );
+
+          xmg_npn_resynthesis resyn;
+          cut_rewriting_params ps;
+          ps.cut_enumeration_ps.cut_size = 4u;
+          cut_rewriting( xmg, resyn, ps );
+          xmg = cleanup_dangling( xmg );
+
+          print_stats( xmg );
+
+          store<xmg_network>().extend(); 
+          store<xmg_network>().current() = xmg;
+        }
       }
     
     private:
