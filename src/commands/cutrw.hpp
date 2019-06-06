@@ -14,6 +14,7 @@
 #define CUTRW_HPP
 
 #include <mockturtle/mockturtle.hpp>
+#include "../networks/m5ig/m5ig_npn.hpp"
 
 namespace alice
 {
@@ -28,26 +29,26 @@ namespace alice
       }
       
       template<class Ntk>
-      void print_stats( Ntk& xmg )
-     {
-       depth_view depth_xmg( xmg );
-       std::cout << fmt::format( "xmg   i/o = {}/{}   gates = {}   level = {}\n", 
-                    xmg.num_pis(), xmg.num_pos(), xmg.num_gates(), depth_xmg.depth() );
-     }
+        void print_stats( Ntk& ntk )
+        {
+          depth_view depth_ntk( ntk );
+          std::cout << fmt::format( "ntk   i/o = {}/{}   gates = {}   level = {}\n", 
+                    ntk.num_pis(), ntk.num_pos(), ntk.num_gates(), depth_ntk.depth() );
+        }
 
       void execute()
       {
         /* parameters */
         if( is_set( "m5ig" ) )
         {
-          /*TODO*/
-#if 0
+          assert( store<m5ig_network>().size() >= 1 );
           m5ig_network m5ig = store<m5ig_network>().current();
 
           print_stats( m5ig );
 
           m5ig_npn_resynthesis resyn;
           cut_rewriting_params ps;
+          ps.very_verbose = true;
           ps.cut_enumeration_ps.cut_size = 4u;
           cut_rewriting( m5ig, resyn, ps );
           m5ig = cleanup_dangling( m5ig );
@@ -56,10 +57,10 @@ namespace alice
 
           store<m5ig_network>().extend(); 
           store<m5ig_network>().current() = m5ig;
-#endif
         }
         else
         {
+          assert( store<xmg_network>().size() >= 1 );
           xmg_network xmg = store<xmg_network>().current();
 
           print_stats( xmg );

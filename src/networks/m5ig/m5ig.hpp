@@ -1,4 +1,5 @@
 /* also: Advanced Logic Synthesis and Optimization tool
+ * 
  * Copyright (C) 2019- Ningbo University, Ningbo, China 
  *
  * Permission is hereby granted, free of charge, to any person
@@ -40,6 +41,7 @@
 #include <kitty/dynamic_truth_table.hpp>
 #include <kitty/operators.hpp>
 #include <mockturtle/mockturtle.hpp>
+#include <mockturtle/networks/events.hpp>
 #include <mockturtle/traits.hpp>
 
 namespace mockturtle
@@ -146,11 +148,15 @@ public:
     }
   };
 
-  m5ig_network() : _storage( std::make_shared<m5ig_storage>() )
+  m5ig_network() 
+      : _storage( std::make_shared<m5ig_storage>() ),
+        _events( std::make_shared<decltype( _events )::element_type>() )
   {
   }
 
-  m5ig_network( std::shared_ptr<m5ig_storage> storage ) : _storage( storage )
+  m5ig_network( std::shared_ptr<m5ig_storage> storage ) 
+    : _storage( storage ),
+      _events( std::make_shared<decltype( _events )::element_type>() )
   {
   }
 
@@ -170,17 +176,21 @@ public:
     auto& node = _storage->nodes.emplace_back();
     node.children[0].data = node.children[1].data = node.children[2].data = node.children[3].data = node.children[4].data = ~static_cast<uint64_t>( 0 );
     _storage->inputs.emplace_back( index );
+    ++_storage->data.num_pis;
     return {index, 0};
   }
 
-  void create_po( signal const& f, std::string const& name = {} )
+  uint32_t create_po( signal const& f, std::string const& name = {} )
   {
     (void)name;
 
     /* increase ref-count to children */
     _storage->nodes[f.index].data[0].h1++;
-
+    auto const po_index = _storage->outputs.size();
     _storage->outputs.emplace_back( f.index, f.complement );
+    ++_storage->data.num_pos;
+    return po_index;
+
   }
 
   bool is_constant( node const& n ) const
@@ -213,15 +223,20 @@ public:
 #pragma endregion
 
 #pragma region Create binary / ternary functions
-  bool is_three_signals_equal( signal a, signal b, signal c )
+  bool is_three_signals_equal( signal const& a, signal const& b, signal const& c )
   {
     return (( a == b ) && ( a == c ));
   }
 
-  signal create_maj5( signal a, signal b, signal c, signal d, signal e )
+  signal create_maj5( signal const& ap, signal const& bp, signal const& cp, signal const& dp, signal const& ep )
   {
+    signal a = ap;
+    signal b = bp;
+    signal c = cp;
+    signal d = dp;
+    signal e = ep;
+    
     /* order inputs */
-#if 0
     std::array<signal, 5> children = { a, b, c, d, e };
     std::sort( children.begin(), children.end(), [this]( auto const& c1, auto const& c2 ) {
       return c1.index < c2.index;
@@ -233,23 +248,26 @@ public:
     c = children[2];
     d = children[3];
     e = children[4];
+    
+    assert( a.index <= b.index );
+    assert( b.index <= c.index );
+    assert( c.index <= d.index );
+    assert( d.index <= e.index );
+
+    /* std::cout << " a.index = " << a.index << " compl? " << a.complement 
+              << " b.index = " << b.index << " compl? " << b.complement
+              << " c.index = " << c.index << " compl? " << c.complement
+              << " d.index = " << d.index << " compl? " << d.complement
+              << " e.index = " << e.index << " compl? " << e.complement << std::endl; */
 
     /* trivial cases */
-    if( is_three_signals_equal( a, b, c ) ) { return a; }
-    if( is_three_signals_equal( a, b, d ) ) { return a; }
-    if( is_three_signals_equal( a, b, e ) ) { return a; }
-    if( is_three_signals_equal( b, c, d ) ) { return b; }
-    if( is_three_signals_equal( b, c, e ) ) { return b; }
-    if( is_three_signals_equal( c, d, e ) ) { return c; }
-
-    /* <01abc> = <abcd!d> = <abce!e> */
-    if(  a == !b && a.index != 0 ) { a = get_constant( false ); b = get_constant( true ); }
-    else if(  b == !c && b.index != 0 ) { b = get_constant( false ); c = get_constant( true ); }
-    else if(  c == !d && c.index != 0 ) { c = get_constant( false ); d = get_constant( true ); }
-    else if(  d == !e && d.index != 0 ) { d = get_constant( false ); e = get_constant( true ); }
-    else { ; } //do nothing
-#endif
-
+    if( is_three_signals_equal( a, b, c ) ) { std::cout << "abc equal" << std::endl; return a; }
+    if( is_three_signals_equal( a, b, d ) ) { std::cout << "abd equal" << std::endl; return a; }
+    if( is_three_signals_equal( a, b, e ) ) { std::cout << "abe equal" << std::endl; return a; }
+    if( is_three_signals_equal( b, c, d ) ) { std::cout << "bcd equal" << std::endl; return b; }
+    if( is_three_signals_equal( b, c, e ) ) { std::cout << "bce equal" << std::endl; return b; }
+    if( is_three_signals_equal( c, d, e ) ) { std::cout << "cde equal" << std::endl; return c; }
+    
     /*  complemented edges minimization */
     auto node_complement = false;
     if ( static_cast<unsigned>( a.complement ) + static_cast<unsigned>( b.complement ) +
@@ -277,17 +295,19 @@ public:
     {
       return {it->second, node_complement};
     }
-    const auto index = _storage->nodes.size();
+    
+    const auto node_index = _storage->nodes.size();
 
-    if ( index >= .9 * _storage->nodes.capacity() )
+    if ( node_index >= .9 * _storage->nodes.capacity() )
     {
-      _storage->nodes.reserve( static_cast<uint64_t>( 3.1415f * index ) );
-      _storage->hash.reserve( static_cast<uint64_t>( 3.1415f * index ) );
+      _storage->nodes.reserve( static_cast<uint64_t>( 3.1415f * node_index ) );
+      _storage->hash.reserve( static_cast<uint64_t>( 3.1415f * node_index ) );
     }
 
     _storage->nodes.push_back( node );
 
-    _storage->hash[node] = index;
+    _storage->hash[node] = node_index;
+    
     /* increase ref-count to children */
     _storage->nodes[a.index].data[0].h1++;
     _storage->nodes[b.index].data[0].h1++;
@@ -295,7 +315,12 @@ public:
     _storage->nodes[d.index].data[0].h1++;
     _storage->nodes[e.index].data[0].h1++;
 
-    return {index, node_complement};
+    for ( auto const& fn : _events->on_add )
+    {
+      fn( node_index );
+    }
+
+    return {node_index, node_complement};
   }
   
   signal create_maj( signal a, signal b, signal c )
@@ -379,25 +404,116 @@ public:
 #pragma endregion
 
 #pragma region Restructuring
-  void substitute_node( node const& old_node, signal const& new_signal )
+  std::optional<std::pair<node, signal>> replace_in_node( node const& n, node const& old_node, signal new_signal )
   {
-    /* find all parents from old_node */
-    for ( auto& n : _storage->nodes )
-    {
-      for ( auto& child : n.children )
-      {
-        if ( child.index == old_node )
-        {
-          child.index = new_signal.index;
-          child.weight ^= new_signal.complement;
+    auto& node = _storage->nodes[n];
 
-          // increment fan-in of new node
-          _storage->nodes[new_signal.index].data[0].h1++;
-        }
+    uint32_t fanin = 0u;
+    for ( auto i = 0u; i < 6u; ++i )
+    {
+      if ( i == 5u )
+      {
+        return std::nullopt;
+      }
+
+      if ( node.children[i].index == old_node )
+      {
+        fanin = i;
+        new_signal.complement ^= node.children[i].weight;
+        break;
       }
     }
 
-    /* check outputs */
+    // determine potential new children of node n
+    signal child4 = new_signal;
+    signal child3 = node.children[(fanin + 1 ) % 5];
+    signal child2 = node.children[(fanin + 2 ) % 5];
+    signal child1 = node.children[(fanin + 3 ) % 5];
+    signal child0 = node.children[(fanin + 4 ) % 5];
+
+    /* order inputs */
+    std::array<signal, 5> children = { child0, child1, child2, child3, child4 };
+    std::sort( children.begin(), children.end(), [this]( auto const& c1, auto const& c2 ) {
+      return c1.index < c2.index;
+    } );
+
+    /* reassignment */
+    child0 = children[0];
+    child1 = children[1];
+    child2 = children[2];
+    child3 = children[3];
+    child4 = children[4];
+
+    assert( child0.index <= child1.index );
+    assert( child1.index <= child2.index );
+    assert( child2.index <= child3.index );
+    assert( child3.index <= child4.index );
+    
+    // normalize complemented edges
+    auto node_complement = false;
+    if ( static_cast<unsigned>( child0.complement ) + static_cast<unsigned>( child1.complement ) +
+         static_cast<unsigned>( child2.complement ) + static_cast<unsigned>( child3.complement ) +
+         static_cast<unsigned>( child4.complement ) >= 3u )
+    {
+      node_complement = true;
+      child0.complement = !child0.complement;
+      child1.complement = !child1.complement;
+      child2.complement = !child2.complement;
+      child3.complement = !child3.complement;
+      child4.complement = !child4.complement;
+    }
+
+    // check for trivial cases?
+    if( is_three_signals_equal( child0, child1, child2 ) ) { return std::make_pair( n, child0 ^ node_complement ); }
+    if( is_three_signals_equal( child0, child1, child3 ) ) { return std::make_pair( n, child0 ^ node_complement ); }
+    if( is_three_signals_equal( child0, child1, child4 ) ) { return std::make_pair( n, child0 ^ node_complement ); }
+    if( is_three_signals_equal( child1, child2, child3 ) ) { return std::make_pair( n, child1 ^ node_complement ); }
+    if( is_three_signals_equal( child1, child2, child4 ) ) { return std::make_pair( n, child1 ^ node_complement ); }
+    if( is_three_signals_equal( child2, child3, child4 ) ) { return std::make_pair( n, child2 ^ node_complement ); }
+    
+    // node already in hash table
+    storage::element_type::node_type _hash_obj;
+    _hash_obj.children[0] = child0;
+    _hash_obj.children[1] = child1;
+    _hash_obj.children[2] = child2;
+    _hash_obj.children[3] = child3;
+    _hash_obj.children[4] = child4;
+    if ( const auto it = _storage->hash.find( _hash_obj ); it != _storage->hash.end() )
+    {
+      return std::make_pair( n, signal( it->second, node_complement ) );
+    }
+
+    // remember before
+    const auto old_child0 = signal{node.children[0]};
+    const auto old_child1 = signal{node.children[1]};
+    const auto old_child2 = signal{node.children[2]};
+    const auto old_child3 = signal{node.children[3]};
+    const auto old_child4 = signal{node.children[4]};
+
+    // erase old node in hash table
+    _storage->hash.erase( node );
+
+    // insert updated node into hash table
+    node.children[0] = child0;
+    node.children[1] = child1;
+    node.children[2] = child2;
+    node.children[3] = child3;
+    node.children[4] = child4;
+    _storage->hash[node] = n;
+
+    // update the reference counter of the new signal
+    _storage->nodes[new_signal.index].data[0].h1++;
+
+    for ( auto const& fn : _events->on_modified )
+    {
+      fn( n, {old_child0, old_child1, old_child2, old_child3, old_child4} );
+    }
+
+    return std::nullopt;
+  }
+
+  void replace_in_outputs( node const& old_node, signal const& new_signal )
+  {
     for ( auto& output : _storage->outputs )
     {
       if ( output.index == old_node )
@@ -409,9 +525,68 @@ public:
         _storage->nodes[new_signal.index].data[0].h1++;
       }
     }
+  }
 
-    // reset fan-in of old node
-    _storage->nodes[old_node].data[0].h1 = 0;
+  void take_out_node( node const& n )
+  {
+    /* we cannot delete PIs or constants */
+    if ( n == 0 || is_pi( n ) )
+      return;
+
+    auto& nobj = _storage->nodes[n];
+    nobj.data[0].h1 = UINT32_C( 0x80000000 ); /* fanout size 0, but dead */
+    _storage->hash.erase( nobj );
+
+    for ( auto const& fn : _events->on_delete )
+    {
+      fn( n );
+    }
+
+    for ( auto i = 0u; i < 5u; ++i )
+    {
+      if ( fanout_size( nobj.children[i].index ) == 0 )
+      {
+        continue;
+      }
+      if ( decr_fanout_size( nobj.children[i].index ) == 0 )
+      {
+        take_out_node( nobj.children[i].index );
+      }
+    }
+  }
+  
+  inline bool is_dead( node const& n ) const
+  {
+    return ( _storage->nodes[n].data[0].h1 >> 31 ) & 1;
+  }
+
+  void substitute_node( node const& old_node, signal const& new_signal )
+  {
+    std::stack<std::pair<node, signal>> to_substitute;
+    to_substitute.push( {old_node, new_signal} );
+
+    while ( !to_substitute.empty() )
+    {
+      const auto [_old, _new] = to_substitute.top();
+      to_substitute.pop();
+
+      for ( auto idx = 1u; idx < _storage->nodes.size(); ++idx )
+      {
+        if ( is_pi( idx ) )
+          continue; /* ignore PIs */
+
+        if ( const auto repl = replace_in_node( idx, _old, _new ); repl )
+        {
+          to_substitute.push( *repl );
+        }
+      }
+
+      /* check outputs */
+      replace_in_outputs( _old, _new );
+
+      // reset fan-in of old node
+      take_out_node( _old );
+    }
   }
 
   void substitute_node_of_parents( std::vector<node> const& parents, node const& old_node, signal const& new_signal )
@@ -461,17 +636,17 @@ public:
 
   auto num_pis() const
   {
-    return static_cast<uint32_t>( _storage->inputs.size() );
+    return _storage->data.num_pis;
   }
 
   auto num_pos() const
   {
-    return static_cast<uint32_t>( _storage->outputs.size() );
+    return _storage->data.num_pos;
   }
 
   auto num_gates() const
   {
-    return static_cast<uint32_t>( _storage->nodes.size() - _storage->inputs.size() - 1 );
+    return static_cast<uint32_t>( _storage->hash.size() );
   }
 
   uint32_t fanin_size( node const& n ) const
@@ -483,7 +658,17 @@ public:
 
   uint32_t fanout_size( node const& n ) const
   {
-    return _storage->nodes[n].data[0].h1;
+    return _storage->nodes[n].data[0].h1 & UINT32_C( 0x7FFFFFFF );
+  }
+  
+  uint32_t incr_fanout_size( node const& n ) const
+  {
+    return _storage->nodes[n].data[0].h1++ & UINT32_C( 0x7FFFFFFF );
+  }
+
+  uint32_t decr_fanout_size( node const& n ) const
+  {
+    return --_storage->nodes[n].data[0].h1 & UINT32_C( 0x7FFFFFFF );
   }
 
   bool is_and( node const& n ) const
@@ -563,9 +748,10 @@ public:
   template<typename Fn>
   void foreach_node( Fn&& fn ) const
   {
-    detail::foreach_element( ez::make_direct_iterator<uint64_t>( 0 ),
+    detail::foreach_element_if( ez::make_direct_iterator<uint64_t>( 0 ),
                              ez::make_direct_iterator<uint64_t>( _storage->nodes.size() ),
-                             fn );
+                                [this]( auto n ) { return !is_dead( n ); },
+                                fn );
   }
 
   template<typename Fn>
@@ -585,7 +771,7 @@ public:
   {
     detail::foreach_element_if( ez::make_direct_iterator<uint64_t>( 1 ), // start from 1 to avoid constant
                                 ez::make_direct_iterator<uint64_t>( _storage->nodes.size() ),
-                                [this]( auto n ) { return !is_pi( n ); },
+                                [this]( auto n ) { return !is_pi( n ) && !is_dead( n ); },
                                 fn );
   }
 
@@ -676,7 +862,7 @@ public:
 
     return poly;
   }
-
+  
   template<typename Iterator>
   iterates_over_truth_table_t<Iterator>
   compute( node const& n, Iterator begin, Iterator end ) const
@@ -699,8 +885,8 @@ public:
 
     auto m1 = kitty::ternary_majority( c1.weight ? ~tt1 : tt1, c2.weight ? ~tt2 : tt2, c3.weight ? ~tt3 : tt3 );
     auto m2 = kitty::ternary_majority( c2.weight ? ~tt2 : tt2, c3.weight ? ~tt3 : tt3, c4.weight ? ~tt4 : tt4 );
-    auto m3 = kitty::ternary_majority( m2.weight ? ~m2 : m2, c4.weight ? ~tt4 : tt4, c5.weight ? ~tt5 : tt5 );
-    auto m4 = kitty::ternary_majority( m1.weight ? ~m1 : m1, m3.weight ? ~m3 : m3, c1.weight ? ~tt1 : tt1 );
+    auto m3 = kitty::ternary_majority( m2, c4.weight ? ~tt4 : tt4, c5.weight ? ~tt5 : tt5 );
+    auto m4 = kitty::ternary_majority( m1, m3, c1.weight ? ~tt1 : tt1 );
 
     return m4;
   }
@@ -760,13 +946,15 @@ public:
 #pragma endregion
 
 #pragma region General methods
-  void update()
+  auto& events() const
   {
+    return *_events;
   }
 #pragma endregion
 
 public:
   std::shared_ptr<m5ig_storage> _storage;
+  std::shared_ptr<network_events<base_type>> _events;
 };
 
 } // namespace mockturtle
