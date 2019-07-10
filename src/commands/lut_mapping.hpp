@@ -27,6 +27,7 @@ namespace alice
         add_option( "cut_size, -k", cut_size, "set the cut size from 2 to 8, default = 4" );
         add_flag( "--verbose, -v", "print the information" );
         add_flag( "--satlut, -s",  "satlut mapping" );
+        add_flag( "--James, -j", "This is Leo James,another name--LEI SHI" );     
       }
 
       rules validity_rules() const
