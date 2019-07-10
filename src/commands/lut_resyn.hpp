@@ -118,7 +118,7 @@ namespace alice
           
           depth_view mig_depth{mig};
           std::cout << "[I/O:" << mig.num_pis() << "/" << mig.num_pos() << "] MIG gates: " 
-                    << mig.num_gates() << " MIG depth: " << mig_depth.depth() << std::endl;
+                    << mig.num_gates() << "      MIG depth: " << mig_depth.depth() << std::endl;
         }
         else if( is_set( "test_m5ig" ) )
         {
