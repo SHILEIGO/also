@@ -92,6 +92,8 @@ namespace also
     int num_invs(  nd_t const& n ); 
     int one_level_savings( nd_t const& n ); 
     int two_level_savings( nd_t const& n ); 
+
+    int xor3_savings_fanouts( nd_t const& n );
     void xor_jump();
     
     void one_level_optimization( const int& thres1, const int& thres2 );
@@ -186,6 +188,14 @@ namespace also
     return num_in;
   }
   
+
+ int inv_manager::xor3_savings_fanouts( nd_t const& n ) 
+  {
+    auto savs = 2*num_invs_fanouts( n ) - num_out_edges( n );
+    return savs;
+  }
+
+
   int inv_manager::num_out_edges( nd_t const& n ) 
   {
     /* pos */
@@ -334,19 +344,30 @@ namespace also
 
   void inv_manager::xor_jump()
   {
+    int xoropt = 0;
     xmg.foreach_gate( [&]( const auto& n ) 
         {
           if( xmg.is_xor3( n ) )
-          {
-            xmg.xor_inv_jump( n );
+          { 
+	    xmg.xor_inv_jump( n );
+
+	    if( xor3_savings_fanouts( n ) > 0 )
+	    {
+                xoropt++;
+		xmg.complement_node_xor3( n, pmap[n] );
+	    }   
+        
           }
         }
         );
+	std::cout << " optimization number times: " << xoropt << std::endl;
   }
 
   void inv_manager::run()
   {
     num_inv_origin = num_inverters( xmg );
+
+    xor_jump();
     
     one_level_optimization( 0, 1 );
     two_level_optimization( 1, 0 );
@@ -354,9 +375,10 @@ namespace also
     one_level_optimization( 0, 1 );
     two_level_optimization( 1, 1 );
     
-    num_inv_opt = num_inverters( xmg );
-
     xor_jump();
+
+    num_inv_opt = num_inverters( xmg );
+    
 
     std::cout << "[xmginv] " << " num_inv_origin: " << num_inv_origin << " num_opt_inv: " << num_inv_opt << std::endl; 
   }
